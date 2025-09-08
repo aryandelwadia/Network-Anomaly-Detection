@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.csv
+*.log
+*.h5
+*.joblib
+.vscode/
+.env
