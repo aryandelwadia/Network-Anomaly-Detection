@@ -1,62 +1,115 @@
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import accuracy_score, classification_report
 import joblib
-import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 
+# ==============================
 # Load the dataset
-df_large = pd.read_csv(r"c:/Users/aryan/Desktop/New folder/network-anomaly-new-main/model/Realistic_Large-Scale_Network_Traffic_Dataset.csv")
+# ==============================
+df_large = pd.read_csv(
+    r"c:/Users/aryan/Desktop/New folder/network-anomaly-new-main/model/Realistic_Large-Scale_Network_Traffic_Dataset.csv"
+)
 
+print("Initial dataset shape:", df_large.shape)
+
+# Graph: distribution of labels before processing
+sns.countplot(x=df_large['label'])
+plt.title("Label Distribution (Raw)")
+plt.show()
+
+# ==============================
 # Split features and target
+# ==============================
 X = df_large.drop(columns=['label'])
 y = df_large['label']
 
-# Initialize label encoders dictionary
-label_encoders = {}
+# Graph: null values per column before preprocessing
+plt.figure(figsize=(10, 5))
+sns.heatmap(X.isnull(), cbar=False, cmap="viridis")
+plt.title("Missing Values (Before Imputation)")
+plt.show()
 
-# Label encode high-cardinality columns
+# ==============================
+# Label Encoding
+# ==============================
+label_encoders = {}
 for col in ['ip.src', 'ip.dst', 'http.request.uri']:
     le = LabelEncoder()
     X[col] = le.fit_transform(X[col].astype(str))
-    label_encoders[col] = le  # Save the encoder for later use
+    label_encoders[col] = le  
 
-# Save the label encoders for prediction
+# Save the encoders
 joblib.dump(label_encoders, 'c:/Users/aryan/Desktop/New folder/network-anomaly-new-main/model/label_encoders.pkl')
 
-# Train-test split (using 80-20 split for evaluation)
+# Graph: encoded features distributions
+for col in ['ip.src', 'ip.dst', 'http.request.uri']:
+    plt.figure(figsize=(8, 4))
+    sns.histplot(X[col], bins=50, kde=False)
+    plt.title(f"Distribution after Label Encoding: {col}")
+    plt.show()
+
+# ==============================
+# Train-Test Split
+# ==============================
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Handle missing values by imputing with the most frequent value
+# Graph: label distribution in train/test
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+sns.countplot(x=y_train, ax=ax[0])
+ax[0].set_title("Train Label Distribution")
+sns.countplot(x=y_test, ax=ax[1])
+ax[1].set_title("Test Label Distribution")
+plt.show()
+
+# ==============================
+# Handle Missing Values
+# ==============================
 imputer = SimpleImputer(strategy='most_frequent')
 X_train = imputer.fit_transform(X_train)
 X_test = imputer.transform(X_test)
 
-# Save the imputer for future use
 joblib.dump(imputer, 'c:/Users/aryan/Desktop/New folder/network-anomaly-new-main/model/imputer.pkl')
 
-# Save trained column names for consistency
+# Graph: check missing after imputation
+plt.figure(figsize=(10, 5))
+sns.heatmap(pd.DataFrame(X_train).isnull(), cbar=False, cmap="viridis")
+plt.title("Missing Values After Imputation (Train)")
+plt.show()
+
+# ==============================
+# Save trained column names
+# ==============================
 trained_columns = X.columns
 joblib.dump(trained_columns, 'c:/Users/aryan/Desktop/New folder/network-anomaly-new-main/model/trained_columns.pkl')
 
-# Fit the Isolation Forest model
+# ==============================
+# Train Isolation Forest
+# ==============================
 clf = IsolationForest(n_estimators=100, max_samples='auto', contamination=0.05, random_state=42)
 clf.fit(X_train)
 
-# Save the trained model
+# Save model
 joblib.dump(clf, 'c:/Users/aryan/Desktop/New folder/network-anomaly-new-main/model/isolation_forest_model.pkl')
 
-# Predict using the Isolation Forest model
-# Note: -1 indicates an anomaly in IsolationForest predictions, and 1 indicates normal
+# ==============================
+# Predictions
+# ==============================
 y_pred = clf.predict(X_test)
+y_pred = np.where(y_pred == -1, 1, 0)  # Convert -1 → anomaly(1), 1 → normal(0)
 
-# Convert predictions to match your labels (0 for normal, 1 for anomalies)
-y_pred = np.where(y_pred == -1, 1, 0)
+# Graph: prediction distribution
+sns.countplot(x=y_pred)
+plt.title("Predicted Anomaly Distribution (Test)")
+plt.show()
 
-# Evaluate the accuracy of the model
+# ==============================
+# Evaluation
+# ==============================
 accuracy = accuracy_score(y_test, y_pred)
-print(f"Model Accuracy: {accuracy}")
-print("Classification Report:")
-print(classification_report(y_test, y_pred))
+print(f"Isolation Forest Model Accuracy: {accuracy:.4f}")
